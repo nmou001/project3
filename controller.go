@@ -109,26 +109,20 @@ func processLogout(response http.ResponseWriter, request *http.Request) {
 	// BEGIN TASK 2: YOUR CODE HERE
 	//////////////////////////////////
 
-	// TODO: clear the session token cookie in the user's browser
-	// HINT: to clear a cookie, set its MaxAge to -1
-
-
-	http.SetCookie(response, &http.Cookie{
-		Name:     "session_token",
-		MaxAge: -1,
-		Value:    sessionToken,
-		Expires:  expires,
-		SameSite: http.SameSiteStrictMode,
-	})
-	_, err = db.Exec("DELETE FROM sessions WHERE token = ?", sessionToken)
+	cookie.MaxAge = -1
+	http.SetCookie(response, cookie)
+	_, err = db.Exec("DELETE FROM sessions WHERE username = ?", username)
 
 	if err != nil {
 		response.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(response, err.Error())
 		return
 	}
-	// TODO: delete the session from the database
 
+	// TODO: clear the session token cookie in the user's browser
+	// HINT: to clear a cookie, set its MaxAge to -1
+
+	// TODO: delete the session from the database
 
 	//////////////////////////////////
 	// END TASK 2: YOUR CODE HERE
@@ -144,18 +138,7 @@ func processUpload(response http.ResponseWriter, request *http.Request, username
 	// BEGIN TASK 3: YOUR CODE HERE
 	//////////////////////////////////
 
-
-
 	// HINT: files should be stored in const filePath = "./files"
-	username := request.FormFile("username")
-
-	//fileWriter, err := bodyWriter.CreateFormFile("uploadfile", filename)
-	if err != nil {
-			fmt.Println("error writing to buffer")
-			return err
-	}
-
-	ioutil.ReadAll()
 
 	// replace this statement
 	fmt.Fprintf(response, "placeholder")

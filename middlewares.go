@@ -3,7 +3,8 @@ package main
 import (
 	"net/http"
 	"time"
-
+	"fmt"
+	"context"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,31 +49,30 @@ func UserAuth(next http.Handler) http.Handler {
 		// BEGIN TASK 1: YOUR CODE HERE
 		//////////////////////////////////
 
-		// TODO: look up the session token in the database
-		session_token := db.QueryRow("SELECT token, expires FROM sessions WHERE username = ?", username)
+		row := db.QueryRow("SELECT expires, username FROM sessions WHERE token = ?", sessionToken)
+		var username string
+		var expires int64
 
-		// TODO: make sure the session token exists (i.e. your query returned something)
-		var token string
-		var expires int
-
-		err := session_token.Scan(&token, &expires)
+		err = row.Scan(&expires, &username)
 
 		if err != nil {
-			response.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(response, err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
 			return
 		} else {
-			start := time.Now().Unix()
-			if start < expires {
+			start := time.Now()
+			if start.Before(time.Unix(expires, 0)) {
 				request = request.WithContext(context.WithValue(request.Context(), userKey, username))
 				next.ServeHTTP(w, request)
 			} else {
-				response.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprint(response, err.Error())
-
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, err.Error())
 			}
 			return
 		}
+		// TODO: look up the session token in the database
+
+		// TODO: make sure the session token exists (i.e. your query returned something)
 
 		// TODO: assign the results of your query to some variables
 
@@ -81,11 +81,10 @@ func UserAuth(next http.Handler) http.Handler {
 
 		// TODO: if the session token is valid, run the following line of code,
 		//       with username assigned to the username corresponding to the session token:
-		///request = request.WithContext(context.WithValue(request.Context(), userKey, username))
+		// request = request.WithContext(context.WithValue(request.Context(), userKey, username))
 
 		// TODO: before returning, run the following line of code:
 		// next.ServeHTTP(w, request)
-		// return
 
 		//////////////////////////////////
 		// END TASK 1: YOUR CODE HERE
