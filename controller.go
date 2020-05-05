@@ -7,13 +7,15 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	_ "io/ioutil"
+	"io/ioutil"
 	"net/http"
-	_ "os"
-	_ "path/filepath"
+	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
+	"strconv"
+	"regexp"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -139,9 +141,52 @@ func processUpload(response http.ResponseWriter, request *http.Request, username
 	//////////////////////////////////
 
 	// HINT: files should be stored in const filePath = "./files"
+	file, header, err := request.FormFile("file")
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
 
-	// replace this statement
-	fmt.Fprintf(response, "placeholder")
+	valid, _ := regexp.MatchString("^[a-zA-Z0-9.]+$", header.Filename)
+	if !valid{
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, "invalid filename")
+		return
+	}
+
+	row := db.QueryRow("SELECT id FROM users WHERE username = ?", username)
+	var userID int
+	err = row.Scan(&userID)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
+	path:= filepath.Join("./files", strconv.Itoa(userID))
+	os.Mkdir(path, 0700)
+
+	b, err := ioutil.ReadAll(file)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
+	path = filepath.Join(path, header.Filename)
+	err = ioutil.WriteFile(path, b, 0644)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
+	_, err = db.Exec("INSERT INTO files VALUES (NULL, ?, ?, ?, ?)", username, username, header.Filename, path)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
+
+	fmt.Fprintf(response, header.Filename+" uploaded.")
 
 	//////////////////////////////////
 	// END TASK 3: YOUR CODE HERE
@@ -165,8 +210,34 @@ func listFiles(response http.ResponseWriter, request *http.Request, username str
 	// TODO: for each of the user's files, add a
 	// corresponding fileInfo struct to the files slice.
 
-	// replace this line
-	fmt.Fprintf(response, "placeholder")
+	rows, err := db.Query("SELECT owner, filename, path FROM files WHERE username = ?", username)
+	if err == nil {
+		
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				owner   string
+				filename string
+				path string
+			)
+			err = rows.Scan(&owner, &filename, &path)
+			if err != nil {
+				response.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(response, err.Error())
+				return
+			}
+			files = append(files, fileInfo{filename, owner, path})
+		}
+	}
+	row := db.QueryRow("SELECT id FROM users WHERE username = ?", username)
+	var userID int
+	err = row.Scan(&userID)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
 
 	//////////////////////////////////
 	// END TASK 4: YOUR CODE HERE
@@ -196,8 +267,17 @@ func getFile(response http.ResponseWriter, request *http.Request, username strin
 	// BEGIN TASK 5: YOUR CODE HERE
 	//////////////////////////////////
 
-	// replace this line
-	fmt.Fprintf(response, "placeholder")
+	row := db.QueryRow("SELECT filename FROM files WHERE username = ? AND path = ?", username, fileString)
+	var filename string
+	err := row.Scan(&filename)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, "no such file.")
+		return
+	}
+
+	setNameOfServedFile(response, filename)
+	http.ServeFile(response, request, fileString)
 
 	//////////////////////////////////
 	// END TASK 5: YOUR CODE HERE
@@ -223,8 +303,32 @@ func processShare(response http.ResponseWriter, request *http.Request, sender st
 	// BEGIN TASK 6: YOUR CODE HERE
 	//////////////////////////////////
 
-	// replace this line
-	fmt.Fprintf(response, "placeholder")
+	row := db.QueryRow("SELECT 1 FROM users WHERE username = ?", recipient)
+	var tmp int
+	err := row.Scan(&tmp)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, "no such recipient")
+		return
+	}
+
+	row = db.QueryRow("SELECT path FROM files WHERE username = ? AND owner = ? AND filename = ?", sender, sender, filename)
+	var path string
+	err = row.Scan(&path)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		printTable(db, "files")
+		fmt.Fprint(response, "no such file")
+		return
+	}
+
+	_, err = db.Exec("INSERT INTO files VALUES (NULL, ?, ?, ?, ?)", recipient, sender, filename, path)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, "couldnt share")
+		return
+	}
+	fmt.Fprint(response, "shared successfully.")
 
 	//////////////////////////////////
 	// END TASK 6: YOUR CODE HERE
