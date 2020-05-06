@@ -142,7 +142,14 @@ func processUpload(response http.ResponseWriter, request *http.Request, username
 
 	// HINT: files should be stored in const filePath = "./files"
 	file, header, err := request.FormFile("file")
+	fname := header.Filename
 	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(response, err.Error())
+		return
+	}
+
+	if len(fname) < 1 || len(fname) > 50 {
 		response.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(response, err.Error())
 		return
@@ -212,7 +219,7 @@ func listFiles(response http.ResponseWriter, request *http.Request, username str
 
 	rows, err := db.Query("SELECT owner, filename, path FROM files WHERE username = ?", username)
 	if err == nil {
-		
+
 		defer rows.Close()
 
 		for rows.Next() {
