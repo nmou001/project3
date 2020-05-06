@@ -142,51 +142,69 @@ func processUpload(response http.ResponseWriter, request *http.Request, username
 
 	// HINT: files should be stored in const filePath = "./files"
 	file, header, err := request.FormFile("file")
+	filename := header.Filename
+
 	if err != nil {
 		response.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(response, err.Error())
+		fmt.Fprint(response, "cannot get the file")
 		return
 	}
 
-	valid, _ := regexp.MatchString("^[a-zA-Z0-9.]+$", header.Filename)
-	if !valid{
+	if len(filename) < 1 || len(filename) > 50 {
 		response.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(response, "invalid filename")
+		fmt.Fprintf(response, "len invalid")
 		return
 	}
+
+	re := regrexp.MustCompile("^[a-zA-Z0-9.]*$")
+	if !re.MatchString(filename) {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(response, "filename invalid")
+		return
+	}
+
+	_, err = db.Exec("INSERT INTO files VALUES (NULL, ?, ?, ?)", filename, username, username)
+	if err!= nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(response, err.Error())
+		return
+	}
+
+	fileContent, err := ioutil.ReadAll(file)
+	if err!= nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(response, err.Error())
+		return
+	}
+
+	defer file.Close()
+	fileBytes := []byte(fileContent)
 
 	row := db.QueryRow("SELECT id FROM users WHERE username = ?", username)
-	var userID int
-	err = row.Scan(&userID)
-	if err != nil {
+	var ownerIDInt int
+	err = row.Scan(&ownerIDInt)
+	if err!= nil {
 		response.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(response, err.Error())
-		return
-	}
-	path:= filepath.Join("./files", strconv.Itoa(userID))
-	os.Mkdir(path, 0700)
-
-	b, err := ioutil.ReadAll(file)
-	if err != nil {
-		response.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(response, err.Error())
-		return
-	}
-	path = filepath.Join(path, header.Filename)
-	err = ioutil.WriteFile(path, b, 0644)
-	if err != nil {
-		response.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(response, err.Error())
-		return
-	}
-	_, err = db.Exec("INSERT INTO files VALUES (NULL, ?, ?, ?, ?)", username, username, header.Filename, path)
-	if err != nil {
-		response.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(response, err.Error())
+		fmt.Fprintf(response, "username does not exist")
 		return
 	}
 
-	fmt.Fprintf(response, header.Filename+" uploaded.")
+	ownerID := strconv.Itoa(ownerIDInt)
+	err = os.MkdirAll(filePath, 0700)
+	if err!= nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(response, "cannot make ./file directory")
+		return
+	}
+	concatenatedFileName := string(ownerID + "_" + filename)
+	newFilePath := filepath.Join(filePath, concatenatedFileName)
+	err = ioutil.WriteFile(newFilePath, fileBytes, 0644)
+	if err!= nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(response, "cannot make ./file directory")
+		return
+	}
+	fmt.Fprintf(response, "file written")
 
 	//////////////////////////////////
 	// END TASK 3: YOUR CODE HERE
@@ -212,7 +230,7 @@ func listFiles(response http.ResponseWriter, request *http.Request, username str
 
 	rows, err := db.Query("SELECT owner, filename, path FROM files WHERE username = ?", username)
 	if err == nil {
-		
+
 		defer rows.Close()
 
 		for rows.Next() {
